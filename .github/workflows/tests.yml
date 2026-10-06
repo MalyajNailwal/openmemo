@@ -1,0 +1,27 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile CLI
+        run: python -c "compile(open('memo', encoding='utf-8').read(), 'memo', 'exec')"
+      - name: Core tests
+        run: python test.py
+      - name: Optional Jev tests (offline)
+        run: python test_jev.py

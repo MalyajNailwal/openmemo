@@ -18,6 +18,7 @@ See github.com/VictorTaelin/OptMem.
 
 import datetime
 import heapq
+import http.client
 try:
     import fcntl
 except ImportError:
@@ -50,8 +51,12 @@ def warn(msg):
 
 
 # Every command this tool prints has to RUN. After `curl | sh` nothing is on
-# PATH, so a bare `memo nap 0-1 "..."` would not: the tool names itself.
-ME = pretty(__file__)
+# PATH, so a bare `memo nap 0-1 "..."` would not: the tool names itself. Native
+# Windows also needs the interpreter because it does not execute a shebang.
+if os.name == "nt":
+    ME = '"%s" "%s"' % (sys.executable, os.path.abspath(__file__))
+else:
+    ME = pretty(__file__)
 
 # The sizes a memory may override in its own `config` file: the default, and
 # what it means. `memo config` shows and edits them. The globals below start
@@ -389,16 +394,17 @@ def locked(d):
         # of raising "Resource deadlock avoided" under contention.
         import msvcrt as _ms
         import time as _t
-        waited = 0.0
+        deadline = _t.monotonic() + 30.0
+        delay = 0.01
         while True:
             try:
                 _ms.locking(lock.fileno(), _ms.LK_NBLCK, 1)
                 break
             except OSError:
-                if waited > 30.0:
+                if _t.monotonic() >= deadline:
                     raise
-                _t.sleep(min(0.01 + waited * 0.2, 0.25))
-                waited += 0.01
+                _t.sleep(delay)
+                delay = min(delay * 1.5, 0.25)
         _orig_close = lock.close
         def _close():
             try:
@@ -750,8 +756,9 @@ def classify(questions, state, config=None):
             raise ValueError("Jev response is too large")
         data = json.loads(raw.decode("utf-8"))
         return _normalize_jev(data, questions, cfg["backend"])
-    except (OSError, TimeoutError, urllib.error.URLError, ValueError,
-            UnicodeError, json.JSONDecodeError, KeyError, TypeError):
+    except (OSError, TimeoutError, urllib.error.URLError, http.client.HTTPException,
+            ValueError, UnicodeError, json.JSONDecodeError, KeyError, TypeError,
+            AttributeError):
         warn("Jev was unavailable or returned an invalid response; continuing without AI.")
         return None
 
@@ -1186,8 +1193,8 @@ def cmd_wake(d, args):
 
 
 def cmd_note(d, args):
-    args, no_ai, dry_run, _show_all = _ai_args(args)
-    if len(args) != 1:
+    args, no_ai, dry_run, show_all = _ai_args(args)
+    if len(args) != 1 or show_all:
         die("usage: %s note [--no-ai|--dry-run] \"<one line, at most %d bytes>\""
             % (ME, ENTRY_CHARS))
     text = check(args[0])
@@ -1405,8 +1412,8 @@ def cmd_import(d, args):
 
 
 def cmd_jev_check(d, args):
-    args, no_ai, dry_run, _show_all = _ai_args(args)
-    if args or no_ai:
+    args, no_ai, dry_run, show_all = _ai_args(args)
+    if args or no_ai or show_all:
         die("usage: %s jev-check [--dry-run]" % ME)
     cfg = _safe_jev_config(dry_run=dry_run, force=True)
     if not cfg.get("enabled"):

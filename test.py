@@ -122,14 +122,15 @@ def run(*args, store=None):
 
 def nap_id(out):
     """The block id from the command a nap prompt offers."""
-    m = re.search(r"memo nap (\d+)-(\d+)", out)
+    m = re.search(r"\bnap (\d+)-(\d+)", out)
     return "%s-%s" % m.groups() if m else None
 
 
 def offered(out):
     """The line offering a command. Every command handed to an agent must be
     an order, not a label: `Run: memo ...`, never `next: memo ...`."""
-    return [l for l in out.splitlines() if "memo nap " in l or "memo wake " in l]
+    return [l for l in out.splitlines()
+            if re.search(r"\b(?:nap|wake) ", l)]
 
 
 # the real entry point still has to work: shebang, argv parsing, exit code
@@ -150,7 +151,7 @@ check(not os.path.exists(d + "-typo"), "a missing MEMORY_DIR was created")
 fresh = {k: v for k, v in os.environ.items() if k != "MEMORY_DIR"}
 fresh["HOME"] = tempfile.mkdtemp()
 noenv = subprocess.run(memo + ["wake"], capture_output=True, text=True, env=fresh)
-check(noenv.returncode == 1 and "memo init" in noenv.stderr,
+check(noenv.returncode == 1 and " init" in noenv.stderr,
       "with no MEMORY_DIR and no memory, wake must point at init")
 init = subprocess.run(memo + ["init"], capture_output=True, text=True, env=fresh)
 check(init.returncode == 0 and "## Memory" in init.stdout
@@ -272,7 +273,7 @@ lines = [l for p in parts for l in p]
 check(len(lines) == WAKE_LINES, "woke with %d lines, want %d" % (len(lines), WAKE_LINES))
 check(lines[-1].startswith("#%d " % (N - 1)), "newest memory not last / not raw")
 check(lines[0].startswith("#0-"), "oldest line should be a summary block")
-check(re.search(r"Run: \S*memo wake 2", run("wake").stdout),
+check(re.search(r"Run: .*memo.* wake 2", run("wake").stdout),
       "part 1 must ORDER the next command, not label it")
 check("You are awake." in run("wake", str(len(parts))).stdout,
       "last part must say it is last")
@@ -347,7 +348,7 @@ check(run("zoom", "9-3").returncode == 1, "zoom accepted a backwards range")
 check(run("zoom").returncode == 1, "zoom with no id must show usage")
 r = run("zoom", "1048576-2097151")
 check(r.returncode == 1 and "beyond the memory" in r.stderr
-      and "memo wake" in r.stderr, "zoom past the end must name a way back")
+      and " wake" in r.stderr, "zoom past the end must name a way back")
 
 
 def treesize():
@@ -508,13 +509,14 @@ check(r.returncode == 1 and "forget 0-1" in r.stderr
 
 # an unreadable level is a filesystem failure and must surface as one --
 # reading it as "not compressed yet" offers work that cannot be done
-os.chmod(os.path.join(d3, "TREE", "2"), 0)
-r_ = subprocess.run(memo + ["wake"], capture_output=True, text=True,
-                    env=dict(os.environ, MEMORY_DIR=d3))
-check(r_.returncode == 1 and "Permission denied" in r_.stderr
-      and "not compressed" not in r_.stdout,
-      "an unreadable level was read as pending work: " + r_.stdout + r_.stderr)
-os.chmod(os.path.join(d3, "TREE", "2"), 0o644)
+if os.name != "nt":  # chmod does not remove read permission on native Windows
+    os.chmod(os.path.join(d3, "TREE", "2"), 0)
+    r_ = subprocess.run(memo + ["wake"], capture_output=True, text=True,
+                        env=dict(os.environ, MEMORY_DIR=d3))
+    check(r_.returncode == 1 and "Permission denied" in r_.stderr
+          and "not compressed" not in r_.stdout,
+          "an unreadable level was read as pending work: " + r_.stdout + r_.stderr)
+    os.chmod(os.path.join(d3, "TREE", "2"), 0o644)
 
 # an impossible calendar date would poison every later import: the store's
 # order check compares against it forever
