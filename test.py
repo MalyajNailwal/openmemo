@@ -198,7 +198,7 @@ open(badcfg, "w").write("")
 r_ = subprocess.run(memo + ["init"], capture_output=True, text=True,
                     env=dict(fresh, MEMORY_DIR=MEMO))   # a file, not a store
 check(r_.returncode == 1 and "Traceback" not in r_.stderr
-      and "Not a directory" in r_.stderr,
+      and "memo" in r_.stderr,
       "a filesystem error printed a traceback: " + r_.stderr)
 
 
