@@ -150,6 +150,7 @@ check(not os.path.exists(d + "-typo"), "a missing MEMORY_DIR was created")
 # prints the paste block, and is idempotent
 fresh = {k: v for k, v in os.environ.items() if k != "MEMORY_DIR"}
 fresh["HOME"] = tempfile.mkdtemp()
+fresh["USERPROFILE"] = fresh["HOME"]  # expanduser() uses this on Windows
 noenv = subprocess.run(memo + ["wake"], capture_output=True, text=True, env=fresh)
 check(noenv.returncode == 1 and " init" in noenv.stderr,
       "with no MEMORY_DIR and no memory, wake must point at init")
