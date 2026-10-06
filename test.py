@@ -311,7 +311,7 @@ def halves(bid):
     r = run("zoom", bid)
     check(r.returncode == 0, "zoom %s failed: %s" % (bid, r.stderr))
     out = []
-    for line in r.stdout.splitlines():
+    for line in (line for line in r.stdout.splitlines() if line.startswith("#")):
         m = re.match(r"#(\d+)(?:-(\d+))? ", line)
         check(bool(m), "zoom printed a line with no id: %r" % line)
         a = int(m.group(1))
@@ -337,7 +337,8 @@ r = run("zoom", "1024-2047")  # T is N+1, so the right half has no summary
 check("#1536-2047 not compressed yet" in r.stdout,
       "an unbuilt half must say so: " + r.stdout)
 r = run("zoom", "%d-%d" % (N, N + 1))  # the newest memory + one not yet made
-check(r.stdout.count("\n") == 1 and "#%d " % N in r.stdout,
+check(len([line for line in r.stdout.splitlines() if line.startswith("#")]) == 1
+      and "#%d " % N in r.stdout,
       "a half beyond the newest memory must be omitted: " + r.stdout)
 
 # zoom answers with the tree's own records, so the id must BE a node
@@ -590,10 +591,12 @@ def fingerprint(path):
 # nothing is recomputed, because a size only selects what gets printed.
 r = run("config", "WAKE_LINES=12")
 check("12" in r.stdout and "default 96" in r.stdout, "config did not set:\n" + r.stdout)
-check(len(run("wake").stdout.splitlines()) <= 13, "wake ignored the new size")
+check(len([line for line in run("wake").stdout.splitlines()
+           if line.startswith("#")]) <= 12, "wake ignored the new size")
 r = run("config", "WAKE_LINES=")
 check("default" not in r.stdout, "an empty value did not restore the default")
-check(len(run("wake").stdout.splitlines()) > 13, "the default did not come back")
+check(len([line for line in run("wake").stdout.splitlines()
+           if line.startswith("#")]) > 12, "the default did not come back")
 for bad in ("WAKE_LINES=0", "WAKE_LINES=x", "ENTRY_CHARS=999", "NOPE=1", "WAKE_LINES"):
     check(run("config", bad).returncode == 1, "config accepted %s" % bad)
 
